@@ -1,0 +1,9 @@
+FROM gcc:13.1.0
+
+WORKDIR /app
+
+COPY sample-code/Main.cpp .
+
+RUN g++ Main.cpp -o main.out
+
+CMD ["./main.out"]
