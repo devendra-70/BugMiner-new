@@ -1,47 +1,45 @@
--- Create problems table
+-- Create problems table (matching your JPA entity)
 CREATE TABLE IF NOT EXISTS problems (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     title VARCHAR(255),
-    description TEXT,
-    topic_tag VARCHAR(255),
-    source VARCHAR(255)
+    description VARCHAR(10000),
+    constraints VARCHAR(5000),
+    default_code VARCHAR(5000)
 );
 
--- Create default_code_map table (Map<String, String> in JPA)
-CREATE TABLE IF NOT EXISTS default_code_map (
-    problem_id INTEGER REFERENCES problems(id) ON DELETE CASCADE,
-    language VARCHAR(100),
-    default_code TEXT,
-    PRIMARY KEY (problem_id, language)
-);
-
--- Create test_cases table
+-- Create test_cases table (matching your JPA entity)
 CREATE TABLE IF NOT EXISTS test_cases (
-    id SERIAL PRIMARY KEY,
-    input TEXT NOT NULL,
-    expected_output TEXT NOT NULL,
-    problem_id INTEGER REFERENCES problems(id) ON DELETE CASCADE
+    id BIGSERIAL PRIMARY KEY,
+    input VARCHAR(10000),
+    expected_output VARCHAR(10000),
+    is_public BOOLEAN NOT NULL DEFAULT true,
+    problem_id BIGINT NOT NULL REFERENCES problems(id) ON DELETE CASCADE
 );
 
--- Insert problems (with ON CONFLICT to avoid duplication)
-INSERT INTO problems (id, title, description, topic_tag, source)
+-- Insert sample problems
+INSERT INTO problems (id, title, description, constraints, default_code)
 VALUES
-    (1, 'Sum of Two Numbers', 'Given two integers, return their sum.', 'math', 'Custom'),
-    (2, 'Palindrome Check', 'Check whether a string is a palindrome.', 'string', 'Custom')
+    (1, 'Sum of Two Numbers',
+     'Given two integers a and b, return their sum.\n\nExample:\nInput: a = 2, b = 3\nOutput: 5',
+     '• -1000 <= a, b <= 1000',
+     'public class Solution {\n    public int sum(int a, int b) {\n        // Your code here\n        return 0;\n    }\n}'),
+    (2, 'Palindrome Check',
+     'Check whether a given string is a palindrome. A palindrome reads the same forward and backward.\n\nExample:\nInput: "madam"\nOutput: true',
+     '• 1 <= s.length <= 1000\n• s consists of lowercase English letters only',
+     'public class Solution {\n    public boolean isPalindrome(String s) {\n        // Your code here\n        return false;\n    }\n}')
 ON CONFLICT (id) DO NOTHING;
 
--- Insert default code for each problem
-INSERT INTO default_code_map (problem_id, language, default_code)
+-- Insert test cases
+INSERT INTO test_cases (input, expected_output, is_public, problem_id)
 VALUES
-    (1, 'java', 'public class Main { public static int sum(int a, int b) { return a + b; } }'),
-    (2, 'java', 'public class Main { public static boolean isPalindrome(String s) { return false; } }')
+    ('2,3', '5', true, 1),
+    ('10,-4', '6', true, 1),
+    ('-100,200', '100', false, 1),
+    ('madam', 'true', true, 2),
+    ('hello', 'false', true, 2),
+    ('racecar', 'true', false, 2)
 ON CONFLICT DO NOTHING;
 
--- Insert test cases
-INSERT INTO test_cases (input, expected_output, problem_id)
-VALUES
-    ('2 3', '5', 1),
-    ('10 -4', '6', 1),
-    ('madam', 'true', 2),
-    ('hello', 'false', 2)
-ON CONFLICT DO NOTHING;
+-- Reset sequences to continue from the inserted data
+SELECT setval('problems_id_seq', (SELECT MAX(id) FROM problems));
+SELECT setval('test_cases_id_seq', (SELECT MAX(id) FROM test_cases));
