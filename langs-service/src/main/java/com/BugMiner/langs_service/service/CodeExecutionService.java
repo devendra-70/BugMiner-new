@@ -5,6 +5,7 @@ import com.BugMiner.langs_service.entity.ExecutionResult;
 import com.BugMiner.langs_service.entity.TestCase;
 import com.BugMiner.langs_service.entity.TestCaseResult;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.io.*;
@@ -106,32 +107,153 @@ public class CodeExecutionService {
 
     private String runInExistingContainer(String containerName, Path codeFilePath, Path inputFilePath) throws IOException, InterruptedException {
         String fileName = codeFilePath.getFileName().toString();
-        String containerCodePath = "/code/" + fileName;
-        String containerInputPath = "/code/input.txt";
 
-        // Copy the code and input file into the container
-        new ProcessBuilder("docker", "cp", codeFilePath.toString(), containerName + ":" + containerCodePath).start().waitFor();
-        new ProcessBuilder("docker", "cp", inputFilePath.toString(), containerName + ":" + containerInputPath).start().waitFor();
+        // Create unique filenames to avoid conflicts between concurrent executions
+        String uniqueId = System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 8);
+        String containerCodePath = "/code/" + uniqueId + "_" + fileName;
+        String containerInputPath = "/code/" + uniqueId + "_input.txt";
+        String containerInputFilename = uniqueId + "_input.txt";
 
-        String execCommand = switch (fileName) {
-            case "Main.java" -> "javac " + containerCodePath + " && java -cp /code Main < " + containerInputPath;
-            case "main.cpp" -> "g++ " + containerCodePath + " -o /code/a.out && /code/a.out < " + containerInputPath;
-            case "main.py" -> "python3 " + containerCodePath + " < " + containerInputPath;
-            default -> throw new IllegalArgumentException("Unknown file type: " + fileName);
-        };
-
-        ProcessBuilder execBuilder = new ProcessBuilder("docker", "exec", containerName, "bash", "-c", execCommand);
-        execBuilder.redirectErrorStream(true);
-        Process execProcess = execBuilder.start();
-
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(execProcess.getInputStream()))) {
-            StringBuilder output = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
+        try {
+            // Copy the code file into the container
+            Process copyCodeProcess = new ProcessBuilder("docker", "cp", codeFilePath.toString(), containerName + ":" + containerCodePath).start();
+            int copyCodeResult = copyCodeProcess.waitFor();
+            if (copyCodeResult != 0) {
+                log.error("Failed to copy code file to container. Exit code: {}", copyCodeResult);
+                return "Error: Failed to copy code file to container";
             }
-            execProcess.waitFor();
+
+            // Copy the input file into the container
+            Process copyInputProcess = new ProcessBuilder("docker", "cp", inputFilePath.toString(), containerName + ":" + containerInputPath).start();
+            int copyInputResult = copyInputProcess.waitFor();
+            if (copyInputResult != 0) {
+                log.error("Failed to copy input file to container. Exit code: {}", copyInputResult);
+                return "Error: Failed to copy input file to container";
+            }
+
+            // Build the execution command with unique filenames and timeout
+            String execCommand = switch (fileName) {
+                case "Main.java" -> String.format("cd /code && timeout 10s bash -c 'javac %s && java Main < %s'", uniqueId + "_" + fileName, containerInputFilename);
+                case "main.cpp" -> String.format("cd /code && timeout 10s bash -c 'g++ %s -o %s_a.out && ./%s_a.out < %s'", uniqueId + "_" + fileName, uniqueId, uniqueId, containerInputFilename);
+                case "main.py" -> String.format("cd /code && timeout 10s python3 %s < %s", uniqueId + "_" + fileName, containerInputFilename);
+                default -> throw new IllegalArgumentException("Unknown file type: " + fileName);
+            };
+
+            log.debug("Executing command in container {}: {}", containerName, execCommand);
+
+            // Execute the command with timeout
+            ProcessBuilder execBuilder = new ProcessBuilder("docker", "exec", containerName, "bash", "-c", execCommand);
+            execBuilder.redirectErrorStream(true);
+            Process execProcess = execBuilder.start();
+
+            StringBuilder output = new StringBuilder();
+            boolean finished = false;
+
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(execProcess.getInputStream()))) {
+                // Wait for process to complete with timeout
+                finished = execProcess.waitFor(15, java.util.concurrent.TimeUnit.SECONDS);
+
+                if (!finished) {
+                    // Process didn't finish within timeout, kill it
+                    execProcess.destroyForcibly();
+                    log.warn("Process timed out and was killed for execution: {}", uniqueId);
+                    return "Error: Execution timed out (15 seconds limit exceeded)";
+                }
+
+                // Read output after process completion
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+            }
+
+            int exitCode = execProcess.exitValue();
+            log.debug("Container execution completed with exit code: {}", exitCode);
+
+            String result = output.toString().trim();
+
+            // Check if timeout occurred (exit code 124 is timeout's exit code)
+            if (exitCode == 124) {
+                result = "Error: Execution timed out (10 seconds limit exceeded)";
+            }
+
+            // Optional: Clean up files immediately after execution
+            // Comment out these lines if you want to rely only on periodic cleanup
+            cleanupContainerFiles(containerName, containerCodePath, containerInputPath, uniqueId);
+
+            return result;
+
+        } catch (Exception e) {
+            log.error("Error during container execution", e);
+            return "Error: " + e.getMessage();
+        }
+    }
+
+    private void cleanupContainerFiles(String containerName, String containerCodePath, String containerInputPath, String uniqueId) {
+        try {
+            // Clean up files in container - wait for completion to avoid race conditions
+            ProcessBuilder cleanupBuilder = new ProcessBuilder("docker", "exec", containerName, "bash", "-c",
+                    String.format("rm -f %s %s /code/%s_a.out", containerCodePath, containerInputPath, uniqueId));
+            Process cleanupProcess = cleanupBuilder.start();
+            int cleanupResult = cleanupProcess.waitFor();
+
+            if (cleanupResult != 0) {
+                log.warn("Cleanup process exited with code: {} for container: {}", cleanupResult, containerName);
+            } else {
+                log.debug("Successfully cleaned up files for execution: {}", uniqueId);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to cleanup container files for execution: {}", uniqueId, e);
+        }
+    }
+
+    // Periodic cleanup to prevent disk space issues
+    @Scheduled(fixedRate = 3600000) // Every hour (3600000 ms)
+    public void periodicContainerCleanup() {
+        String[] containers = {JAVA_CONTAINER, CPP_CONTAINER, PYTHON_CONTAINER};
+
+        for (String container : containers) {
+            try {
+                if (isContainerRunning(container)) {
+                    // Remove files older than 2 hours to be safe
+                    ProcessBuilder pb = new ProcessBuilder(
+                            "docker", "exec", container,
+                            "find", "/code", "-type", "f", "-mmin", "+120", "-delete"
+                    );
+                    Process process = pb.start();
+                    int result = process.waitFor();
+
+                    if (result == 0) {
+                        log.info("Periodic cleanup completed for container: {}", container);
+                    } else {
+                        log.warn("Periodic cleanup had issues for container: {}, exit code: {}", container, result);
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to perform periodic cleanup for container: {}", container, e);
+            }
+        }
+    }
+
+    // Optional: Method to get container disk usage for monitoring
+    public String getContainerDiskUsage(String containerName) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("docker", "exec", containerName, "du", "-sh", "/code");
+            Process process = pb.start();
+
+            StringBuilder output = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line);
+                }
+            }
+
+            process.waitFor();
             return output.toString().trim();
+        } catch (Exception e) {
+            log.error("Failed to get disk usage for container: {}", containerName, e);
+            return "Unknown";
         }
     }
 }
