@@ -7,4 +7,6 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ProblemRepository extends JpaRepository<Problem, Long> {
+    // Optional custom methods like:
+    // List<Problem> findByTitleContainingIgnoreCase(String title);
 }
