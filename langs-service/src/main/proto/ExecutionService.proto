@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.langservice.grpc";
+option java_outer_classname = "ExecutionServiceProto";
+
+service ExecutionService {
+    rpc ExecuteCode (CodeExecutionRequest) returns (CodeExecutionResponse);
+}
+
+message CodeExecutionRequest {
+    string language = 1;                  // e.g., "python", "cpp"
+    string code = 2;                      // The source code to run
+    repeated ExecutionTestCase testCases = 3;      // List of inputs/expected outputs
+}
+
+message ExecutionTestCase {
+    string input = 1;                     // The input to provide to the code
+    string expectedOutput = 2;            // The expected output to compare with
+}
+
+message CodeExecutionResponse {
+    bool success = 1;                     // Overall: did all tests pass
+    repeated ExecutionTestResult testResults = 2; // Result of each test
+    string errorMessage = 3;              // Compilation/runtime errors, if any
+    int32 exitCode = 4;                   // Exit code from container (if needed)
+}
+
+message ExecutionTestResult {
+    string input = 1;
+    string expectedOutput = 2;
+    string actualOutput = 3;
+    bool passed = 4;                      // Whether this test passed or failed
+}

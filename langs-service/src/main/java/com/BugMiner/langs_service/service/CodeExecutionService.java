@@ -2,6 +2,8 @@ package com.BugMiner.langs_service.service;
 
 import com.BugMiner.langs_service.entity.ExecutionRequest;
 import com.BugMiner.langs_service.entity.ExecutionResult;
+import com.BugMiner.langs_service.entity.TestCase;
+import com.BugMiner.langs_service.entity.TestCaseResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -9,6 +11,8 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -22,12 +26,11 @@ public class CodeExecutionService {
     public ExecutionResult executeCode(ExecutionRequest request) {
         String language = request.getLanguage().toLowerCase();
         String code = request.getCode();
-        String input = request.getInput();
+        List<TestCase> testCases = request.getTestCases();
 
         try {
             Path tempDir = Files.createTempDirectory("exec-" + UUID.randomUUID());
             Path codeFilePath = createCodeFile(tempDir, language, code);
-            Path inputFilePath = createInputFile(tempDir, input);
 
             String containerName = getContainerForLanguage(language);
             if (containerName == null) {
@@ -38,8 +41,18 @@ public class CodeExecutionService {
                 return new ExecutionResult(false, null, "Container down: " + containerName + " is not running.", 1);
             }
 
-            String output = runInExistingContainer(containerName, codeFilePath, tempDir);
-            return new ExecutionResult(true, output, null, 0);
+            List<TestCaseResult> results = new ArrayList<>();
+
+            for (TestCase testCase : testCases) {
+                Path inputFilePath = createInputFile(tempDir, testCase.getInput());
+                String output = runInExistingContainer(containerName, codeFilePath, inputFilePath);
+
+                boolean passed = output.trim().equals(testCase.getExpectedOutput().trim());
+                results.add(new TestCaseResult(testCase.getInput(), testCase.getExpectedOutput(), output, passed));
+            }
+
+            boolean allPassed = results.stream().allMatch(TestCaseResult::isPassed);
+            return new ExecutionResult(allPassed, results, null, 0);
 
         } catch (Exception e) {
             log.error("Execution failed", e);
@@ -87,22 +100,23 @@ public class CodeExecutionService {
             }
         }
 
-        int exitCode = process.waitFor();
+        process.waitFor();
         return false;
     }
 
-    private String runInExistingContainer(String containerName, Path codeFilePath, Path tempDir) throws IOException, InterruptedException {
+    private String runInExistingContainer(String containerName, Path codeFilePath, Path inputFilePath) throws IOException, InterruptedException {
         String fileName = codeFilePath.getFileName().toString();
-        String containerFilePath = "/code/" + fileName;
+        String containerCodePath = "/code/" + fileName;
+        String containerInputPath = "/code/input.txt";
 
-        // Copy the code file into the container
-        new ProcessBuilder("docker", "cp", codeFilePath.toString(), containerName + ":" + containerFilePath)
-                .start().waitFor();
+        // Copy the code and input file into the container
+        new ProcessBuilder("docker", "cp", codeFilePath.toString(), containerName + ":" + containerCodePath).start().waitFor();
+        new ProcessBuilder("docker", "cp", inputFilePath.toString(), containerName + ":" + containerInputPath).start().waitFor();
 
         String execCommand = switch (fileName) {
-            case "Main.java" -> "javac " + containerFilePath + " && java -cp /code Main";
-            case "main.cpp" -> "g++ " + containerFilePath + " -o /code/a.out && /code/a.out";
-            case "main.py" -> "python3 " + containerFilePath;
+            case "Main.java" -> "javac " + containerCodePath + " && java -cp /code Main < " + containerInputPath;
+            case "main.cpp" -> "g++ " + containerCodePath + " -o /code/a.out && /code/a.out < " + containerInputPath;
+            case "main.py" -> "python3 " + containerCodePath + " < " + containerInputPath;
             default -> throw new IllegalArgumentException("Unknown file type: " + fileName);
         };
 
@@ -117,8 +131,7 @@ public class CodeExecutionService {
                 output.append(line).append("\n");
             }
             execProcess.waitFor();
-            return output.toString();
+            return output.toString().trim();
         }
     }
 }
-
