@@ -3,6 +3,7 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/BugMiner.iml" filepath="$PROJECT_DIR$/BugMiner.iml" />
+      <module fileurl="file://$PROJECT_DIR$/codex/codex.iml" filepath="$PROJECT_DIR$/codex/codex.iml" />
     </modules>
   </component>
 </project>
