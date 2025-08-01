@@ -1,4 +1,10 @@
 package com.BugMiner.user_service.repository;
 
-public class RoleRepository {
+import com.BugMiner.user_service.entity.Role;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.Optional;
+
+public interface RoleRepository extends JpaRepository {
+    Optional<Role> findByName(String name);
 }
