@@ -1,6 +1,6 @@
-package com.bugminer.userservice.filter;
+package com.BugMiner.user_service.filter;
 
-import com.bugminer.userservice.util.JwtUtil;
+import com.BugMiner.user_service.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

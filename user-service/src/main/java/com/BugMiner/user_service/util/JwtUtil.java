@@ -1,4 +1,4 @@
-package com.bugminer.userservice.util;
+package com.BugMiner.user_service.util;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
