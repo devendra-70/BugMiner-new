@@ -3,12 +3,11 @@ package com.BugMiner.user_service.entity;
 import jakarta.persistence.*;
 import lombok.*;
 
-import java.util.*;
+import java.util.Set;
 
 @Entity
 @Table(name = "users")
-@Getter
-@Setter
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class User {
@@ -29,5 +28,5 @@ public class User {
             joinColumns = @JoinColumn(name = "user_id"),
             inverseJoinColumns = @JoinColumn(name = "role_id")
     )
-    private Set<com.bugminer.userservice.entity.Role> roles = new HashSet<>();
+    private Set<Role> roles;
 }
