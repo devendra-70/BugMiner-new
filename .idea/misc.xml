@@ -7,6 +7,7 @@
         <option value="$PROJECT_DIR$/codex/pom.xml" />
         <option value="$PROJECT_DIR$/langs-service/pom.xml" />
         <option value="$PROJECT_DIR$/AIgen/pom.xml" />
+        <option value="$PROJECT_DIR$/user-service/pom.xml" />
       </list>
     </option>
   </component>

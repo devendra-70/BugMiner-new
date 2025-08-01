@@ -4,5 +4,6 @@
     <file url="file://$PROJECT_DIR$/AIgen/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/codex/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/langs-service/src/main/java" charset="UTF-8" />
+    <file url="file://$PROJECT_DIR$/user-service/src/main/java" charset="UTF-8" />
   </component>
 </project>
