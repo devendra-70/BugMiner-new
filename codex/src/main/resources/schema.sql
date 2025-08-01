@@ -1,3 +1,11 @@
+-- Create learning_paths table
+CREATE TABLE IF NOT EXISTS learning_paths (
+    id BIGSERIAL PRIMARY KEY,
+    language VARCHAR(255),
+    topic VARCHAR(255),
+    subtopic VARCHAR(255)
+);
+
 -- Create problems table (matching your JPA entity)
 CREATE TABLE IF NOT EXISTS problems (
     id BIGSERIAL PRIMARY KEY,
@@ -15,6 +23,48 @@ CREATE TABLE IF NOT EXISTS test_cases (
     is_public BOOLEAN NOT NULL DEFAULT true,
     problem_id BIGINT NOT NULL REFERENCES problems(id) ON DELETE CASCADE
 );
+
+-- Insert learning path data
+INSERT INTO learning_paths (language, topic, subtopic)
+VALUES
+    -- Python topics
+    ('Python', 'Basics', 'Variables & Data Types'),
+    ('Python', 'Basics', 'Control Flow'),
+    ('Python', 'Basics', 'Functions'),
+    ('Python', 'OOP', 'Classes & Objects'),
+    ('Python', 'OOP', 'Inheritance'),
+    ('Python', 'Advanced', 'Modules & Packages'),
+    ('Python', 'Advanced', 'File I/O'),
+    ('Python', 'Advanced', 'Error Handling'),
+
+    -- Java topics
+    ('Java', 'Basics', 'Variables & Primitives'),
+    ('Java', 'Basics', 'Control Statements'),
+    ('Java', 'OOP', 'Classes & Objects'),
+    ('Java', 'OOP', 'Interfaces & Abstract Classes'),
+    ('Java', 'Advanced', 'Exception Handling'),
+    ('Java', 'Advanced', 'Collections Framework'),
+
+    -- C++ topics
+    ('C++', 'Basics', 'Syntax & Data Types'),
+    ('C++', 'Basics', 'Pointers & References'),
+    ('C++', 'OOP', 'Classes & Inheritance'),
+    ('C++', 'Advanced', 'Templates & STL'),
+    ('C++', 'Advanced', 'Exception Handling'),
+
+    -- NumPy topics
+    ('NumPy', 'Basics', 'Arrays & Vectorization'),
+    ('NumPy', 'Basics', 'Indexing & Slicing'),
+    ('NumPy', 'Advanced', 'Math & Stats'),
+    ('NumPy', 'Advanced', 'Linear Algebra'),
+
+    -- Pandas topics
+    ('Pandas', 'Basics', 'Series & DataFrames'),
+    ('Pandas', 'Basics', 'Filtering & Sorting'),
+    ('Pandas', 'Advanced', 'GroupBy & Aggregations'),
+    ('Pandas', 'Advanced', 'Merging & Joins'),
+    ('Pandas', 'Advanced', 'Time Series')
+ON CONFLICT DO NOTHING;
 
 -- Insert sample problems
 INSERT INTO problems (id, title, description, constraints, default_code)
@@ -41,5 +91,6 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- Reset sequences to continue from the inserted data
+SELECT setval('learning_paths_id_seq', (SELECT MAX(id) FROM learning_paths));
 SELECT setval('problems_id_seq', (SELECT MAX(id) FROM problems));
 SELECT setval('test_cases_id_seq', (SELECT MAX(id) FROM test_cases));
